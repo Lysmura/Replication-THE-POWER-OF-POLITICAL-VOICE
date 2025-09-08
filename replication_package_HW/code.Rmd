@@ -1,0 +1,439 @@
+---
+title: "code"
+author: "Elysabeth Triffe"
+date: "2025-02-19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = T, 
+                      results = "hide", 
+                      warning = FALSE, 
+                      message = FALSE,
+                      fig.show='hide')
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(fixest)
+library(kableExtra)
+library(psych)
+```
+
+## Preambule
+The following code is presented under a markdown format for an easier lecture. It provides all chunks to reproduce the figures used in the replication paper. Note that some results can differ slightly from Stata as the implementation in R sometimes doesn't use the same methods. The following package are necessary to run the code : 
+ - haven
+ - dplyr
+ - ggplot2
+ - fixest
+ - kableExtra
+ - psych
+Above that, make sure to have an updated installation of R and htmltools, R studio highly recommended. The replication package is available [here](https://www.openicpsr.org/openicpsr/project/113833/version/V1/view) and the paper [here](https://sites.nd.edu/lakshmi-iyer/files/2022/03/IMMT_AEJAppFinal.pdf). 
+
+## Loading data
+```{r data}
+tab1to5 <- read_dta("data/tables1to5.dta") %>% 
+  mutate(parrest_poptot_womcrime = (parrest_womcrime*pfemale)/(1+pfemale))
+tab6 <- read_dta("data/table6.dta")
+tab7 <- read_dta("data/table7.dta") %>% 
+  mutate(ave_fir = as.numeric((scale(fir_evetease) + scale(fir_bicycle) + 
+                                 scale(fir_cell) + scale(fir_beaten) + 
+                                 scale(fir_motor))/5))
+
+```
+
+## Table 2 - Summary statistics
+```{r tab2}
+#Load relevant data filtered per year, region, and election and apply the 
+#describe function to retrieve the statistics for each, and filter on the 
+#required one
+temp <- rbind(tab1to5 %>% filter(year >= 1985 & majstate == 1) %>% 
+  select(c(parrest_poptot_womcrime, pcr_womtot, prape2, pwomgirl, pkidmen, pcr_prop, pcr_order, pcr_econ, 
+         pmurder, pmurder_love, psuic_f, psuic_m)) %>% 
+  describe(),
+      tab1to5 %>% filter(year >= 1992 & elec_scres>=1995 & majstate == 1) %>% 
+  select(c(pscpoa, pscpcr, pstpoa, pstpcr, psctot, psttot)) %>% 
+  describe(),
+      tab1to5 %>% filter(year>=1988 & majstate==1) %>% 
+  select(c(parrest_womcrime, parrest_rape, parrest_womgirl, parrest_nonwomen,
+           parrest_kidmen, murder_m, 
+           murder_f)) %>% 
+  describe(),
+      tab1to5 %>% filter(year>=1991 & majstate==1) %>% 
+  select(c(charge_womcrime, chargesheet_rate)) %>% 
+  describe(),
+      tab1to5 %>% filter(year>=1985 & majstate==1) %>% 
+  select(c(pfemale, prural, plit, pfarm, womancm, ppol_strength, pcgsdp)) %>% 
+  describe()
+  ) %>% select(c(n, mean, sd, min, max))
+
+#Panel A:
+labels <- c("Total crimes against women per 1000 women (1985-2007)",
+            "Rapes per 1000 women (1985-2007)",
+            "Kidnapping of women and girls per 1000 women (1988-2007)",
+            "Kidnapping of men and boys per 1000 men (1988-2007)",
+            "Crimes against property per 1000 pop (1985-2007)",
+            "Crimes against public order per 1000 pop (1985-2007)",
+            "Economic crimes per 1000 pop (1985-2007)",
+            "Murders per 1000 pop (1985-2007)",
+            "Atrocities against SCs per 1000 SC pop (1992-2007)",
+            "Civil rights violations of SC per 1000 SC pop (1992-2007)",
+            "Atrocities against STs per 1000 ST pop (1992-2007)",
+            "Civil rights violations of ST per 1000 ST pop (1992-2007)",
+            "Total crimes against SCs per 1000 SC pop (1992-2007)",
+            "Total crimes against STs per 1000 ST pop (1992-2007) ")
+
+temp %>% filter(row.names(temp) %in% c("pcr_womtot", "prape2", "pwomgirl", 
+                                     "pkidmen", "pmurder", "pcr_prop", 
+                                     "pcr_order", "pcr_econ", "psctot", 
+                                     "pscpcr", "pscpoa", "pstpcr", "pstpoa", 
+                                     "pstot", "psttot")) %>% 
+  `rownames<-`(labels) %>% 
+  kable("latex", booktabs = T, digits = 3) %>%
+  kable_classic_2(full_width = F) %>% 
+  kable_styling( latex_options = "scale_down") %>% 
+  save_kable("figures/Table2_panelA.tex")
+
+#Panel B:
+labels <- c("Arrests for crimes against women per 1000 pop (1985-2007)",
+            "Arrests for rape per 1000 pop (1988-2007)",
+            "Arrests for kidnapping of women per 1000 pop (1988-2007)",
+            "Arrests for crimes excluding crimes against women (1988-2007)",
+            "Arrests for kidnapping of men per 1000 pop (1988-2007)",
+            "Chargesheeting rate for crimes against women (1991-2007)",
+            "Chargesheeting rate for all crimes (1991-2007)")
+
+temp %>% filter(row.names(temp) %in% c("parrest_poptot_womcrime", "parrest_rape", 
+                                       "parrest_womgirl", "parrest_nonwomen", 
+                                       "parrest_kidmen", 
+                                       "charge_womcrime", "chargesheet_rate" )) %>% 
+  `rownames<-`(labels) %>% 
+  kable("latex", booktabs = T, digits = 3) %>%
+  kable_classic_2(full_width = F) %>% 
+  kable_styling( latex_options = "scale_down") %>% 
+  save_kable("figures/Table2_panelB.tex") 
+
+#Panel C:
+labels <- c("Female-male ratio",
+            "Proportion of rural population",
+            "Proportion literate",
+            "Proportion with farming as main activity",
+            "Woman Chief Minister (dummy)",
+            "Police strength per 1000 population",
+            "Per capita state GDP ('000 rupees)"
+            )
+
+temp %>% filter(row.names(temp) %in% c("pfemale", "prural", "plit", "pfarm", 
+                                       "womancm", "pcgsdp", "ppol_strength")) %>% 
+  `rownames<-`(labels) %>% 
+  kable("latex", booktabs = T, digits = 3) %>%
+  kable_classic_2(full_width = F) %>% 
+  kable_styling( latex_options = "scale_down") %>% 
+  save_kable("figures/Table2_panelC.tex")
+
+#Clear cash
+rm(temp, labels)
+```
+
+## Table 3 - Table 3 - Political Representation and Crime against Women
+```{r tab3}
+tab1to5 %>% 
+ filter(year>=1985 & majstate==1) %>% 
+ feols(lpcr_womtot ~ postwres + 
+         sw0(pfemale + prural + plit + pfarm + womancm + pcgsdp, 
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength,
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + pwlit,
+             i(stateid,year),
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + i(stateid,year)
+             ) | stateid + year,
+          cluster = "stateid") %>% 
+  etable(keep = "%postwres", digits = 3,
+         group = list(`Demographic and economic controls` = "pfemale",
+                      `Control for female litteracy` = "pwlit",
+                      `Control for woman CM` = "womancm",
+                      `Control for police strength` = "ppol_strength",
+                      `Control for state specific time trend` = "2"),
+         fitstat=c('n', 'r2'),
+         file = "figures/Table3.tex",
+         replace = TRUE,
+         style.tex = style.tex("aer"),
+         dict = c(lpcr_womtot = "Total crimes against women per 1000 women",
+                  lprape2 = "Rapes per 1000 women",
+                  lpwomgirl = "Kidnapping of women & girls per 1000 women",
+                  postwres = "Women's Reservation Implemented"))
+
+tab1to5 %>% 
+ filter(year>=1985 & majstate==1) %>% 
+ feols(lprape2 ~ postwres + 
+         sw0(pfemale + prural + plit + pfarm + womancm + pcgsdp, 
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength,
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + pwlit,
+             i(stateid,year),
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + i(stateid,year)
+             ) | stateid + year,
+          cluster = "stateid") %>% 
+  etable(keep = "%postwres", digits = 3,
+         group = list(`Demographic and economic controls` = "pfemale",
+                      `Control for female litteracy` = "pwlit",
+                      `Control for woman CM` = "womancm",
+                      `Control for police strength` = "ppol_strength",
+                      `Control for state specific time trend` = "2"),
+         fitstat=c('n', 'r2'),
+         file = "figures/Table3.tex",
+         style.tex = style.tex("aer"),
+         dict = c(lpcr_womtot = "Total crimes against women per 1000 women",
+                  lprape2 = "Rapes per 1000 women",
+                  lpwomgirl = "Kidnapping of women & girls per 1000 women",
+                  postwres = "Women's Reservation Implemented"))
+
+tab1to5 %>% 
+ filter(year>=1985 & majstate==1) %>% 
+ feols(lpwomgirl ~ postwres + 
+         sw0(pfemale + prural + plit + pfarm + womancm + pcgsdp, 
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength,
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + pwlit,
+             i(stateid,year),
+             pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + i(stateid,year)
+             ) | stateid + year,
+          cluster = "stateid") %>% 
+  etable(keep = "%postwres", digits = 3,
+         group = list(`Demographic and economic controls` = "pfemale",
+                      `Control for female litteracy` = "pwlit",
+                      `Control for woman CM` = "womancm",
+                      `Control for police strength` = "ppol_strength",
+                      `Control for state specific time trend` = "2"),
+         fitstat=c('n', 'r2'),
+         file = "figures/Table3.tex",
+         style.tex = style.tex("aer"),
+         dict = c(lpcr_womtot = "Total crimes against women per 1000 women",
+                  lprape2 = "Rapes per 1000 women",
+                  lpwomgirl = "Kidnapping of women & girls per 1000 women",
+                  postwres = "Women's Reservation Implemented"))
+  
+```
+
+## Table 6 - Women's Political Representation and Crimes against Women: Evidence from a Victimization Survey
+```{r}
+#Panel A
+tab6 %>% 
+  filter(female==1) %>% 
+  feols(c(anycrime, s_molest, s_evetease, s_attack) ~ res_woman + i(ident) | district) %>% 
+  etable(keep = "%res_woman", digits = 4,
+         cluster = "district",
+         fitstat=c('n', 'r2'),
+         file = "figures/Table6.tex",
+         title = "Panel A. Rural sample: Baseline and End-line survey",
+         style.tex = style.tex("aer"),
+         dict = c(anycrime = "Any crime",
+                  s_molest = "Molestation",
+                  s_evetease = "Eve-teasing",
+                  s_attack = "Attack",
+                  res_woman = " Village council head position reserved \\ for women in 2005"
+                  ), replace = TRUE)
+
+#Panel B
+tab6 %>% 
+  filter(female==1 & ident=="base") %>% 
+  feols(c(anycrime, s_molest, s_evetease, s_attack) ~ res_woman| district) %>% 
+  etable(keep = "%res_woman", digits = 4,
+         cluster = "district",
+         fitstat=c('n', 'r2'),
+         file = "figures/Table6.tex",
+         title = "Panel B. Rural sample: Baseline survey",
+         style.tex = style.tex("aer"),
+         dict = c(anycrime = "Any crime",
+                  s_molest = "Molestation",
+                  s_evetease = "Eve-teasing",
+                  s_attack = "Attack",
+                  res_woman = " Village council head position reserved \\ for women in 2005"
+                  ))
+
+#Panel C
+tab6 %>% 
+  filter(female==1 & ident=="end") %>% 
+  feols(c(anycrime, s_molest, s_evetease, s_attack) ~ res_woman| district) %>% 
+  etable(keep = "%res_woman", digits = 4,
+         cluster = "district",
+         fitstat=c('n', 'r2'),
+         file = "figures/Table6.tex",
+         title = "Panel C. Rural sample: endline survey",
+         style.tex = style.tex("aer"),
+         dict = c(anycrime = "Any crime",
+                  s_molest = "Molestation",
+                  s_evetease = "Eve-teasing",
+                  s_attack = "Attack",
+                  res_woman = " Village council head position reserved \\ for women in 2005"
+                  ))
+```
+
+## Table 7 -  Women's Political Representation and Willingness to Report Crimes
+```{r tab4}
+#Panel A
+t <- list(
+  tab7 %>% 
+    filter(female==1) %>% 
+    feols(c(ave_fir, fir_evetease,  fir_cell, fir_beaten) ~ res_woman + i(ident) 
+          | district),
+  tab7 %>% 
+    filter(female==0) %>% 
+    feols(c(ave_fir, fir_evetease,  fir_cell, fir_beaten) ~ res_woman + i(ident) 
+          | district) )
+
+c(t[[1]][1], t[[2]][1], t[[1]][2], t[[2]][2], t[[1]][3], t[[2]][3], t[[1]][4], t[[2]][4]) %>% 
+    etable(keep = "%res_woman", digits = 3,
+           cluster = "gram_panchayat",
+           fitstat=c('n', 'r2'),
+           signif.code = c("***"=0.01, "**"=0.05, "*"=0.10),
+           file = "figures/Table7.tex",
+           replace = TRUE,
+           title = "Panel A. Rural sample: Baseline and End-line survey",
+           style.tex = style.tex("aer"),
+           headers= rep(c("F", "M"), 4),
+           dict = c(ave_fir = "Normalized average", 
+                    fir_evetease = "Eve-teasing",  
+                    fir_cell = "Stolen cell phone", 
+                    fir_beaten = "Beating up by someone",
+                    res_woman = " Village council head position reserved for women in 2005"
+                    ))
+
+#Panel B
+t <- list(
+  tab7 %>% 
+    filter(female==1 & ident=="base") %>% 
+    feols(c(ave_fir, fir_evetease,  fir_cell, fir_beaten) ~ res_woman | district),
+  tab7 %>% 
+    filter(female==0 & ident=="base") %>% 
+    feols(c(ave_fir, fir_evetease,  fir_cell, fir_beaten) ~ res_woman | district) 
+  )
+
+c(t[[1]][1], t[[2]][1], t[[1]][2], t[[2]][2], t[[1]][3], t[[2]][3], t[[1]][4], t[[2]][4]) %>% 
+    etable(keep = "%res_woman", digits = 3,
+           cluster = "gram_panchayat",
+           fitstat=c('n', 'r2'),
+           signif.code = c("***"=0.01, "**"=0.05, "*"=0.10),
+           file = "figures/Table7.tex",
+           title = "Panel B. Rural sample: Baseline survey",
+           style.tex = style.tex("aer"),
+           headers= rep(c("F", "M"), 4),
+           dict = c(ave_fir = "Normalized average", 
+                    fir_evetease = "Eve-teasing",  
+                    fir_cell = "Stolen cell phone", 
+                    fir_beaten = "Beating up by someone",
+                    res_woman = " Village council head position reserved for women in 2005"
+                    ))
+
+#Panel C
+t <- list(
+  tab7 %>% 
+    filter(female==1 & ident=="end") %>% 
+    feols(c(ave_fir, fir_evetease,  fir_cell, fir_beaten) ~ res_woman | district),
+  tab7 %>% 
+    filter(female==0 & ident=="end") %>% 
+    feols(c(ave_fir, fir_evetease,  fir_cell, fir_beaten) ~ res_woman | district) 
+  )
+
+c(t[[1]][1], t[[2]][1], t[[1]][2], t[[2]][2], t[[1]][3], t[[2]][3], t[[1]][4], t[[2]][4]) %>% 
+    etable(keep = "%res_woman", digits = 3,
+           cluster = "gram_panchayat",
+           fitstat=c('n', 'r2'),
+           signif.code = c("***"=0.01, "**"=0.05, "*"=0.10),
+           file = "figures/Table7.tex",
+           title = "Panel C. Rural sample: Endline survey",
+           style.tex = style.tex("aer"),
+           headers= rep(c("F", "M"), 4),
+           dict = c(ave_fir = "Normalized average", 
+                    fir_evetease = "Eve-teasing",  
+                    fir_cell = "Stolen cell phone", 
+                    fir_beaten = "Beating up by someone",
+                    res_woman = " Village council head position reserved for women in 2005"
+                    ))
+rm(t)
+```
+
+## Table 9 - Police activity
+```{r tab 5}
+#Panel A
+list(
+tab1to5 %>% 
+ filter(year>=1988 & majstate==1) %>% 
+  feols(c(lparrest_womcrime, lparrest_rape, lparrest_womgirl, lparrest_nonwomen, lparrest_kidmen) ~ postwres+ pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength| stateid + year),
+tab1to5 %>%
+ filter(year>=1991 & majstate==1) %>% 
+  feols(c(charge_womcrime, chargesheet_rate) ~ postwres+ pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength| stateid + year)
+  ) %>% 
+  etable(keep = "%postwres", digits = 3,
+         cluster = "stateid",
+         group = list(`Demographic, economic  and political controls` = "pfemale",
+                      `Control for woman CM` = "womancm",
+                      `Control for police strength` = "ppol_strength",
+                      `Control for state specific time trend` = "2"),
+         fitstat=c('n', 'r2'),
+         file = "figures/Table9.tex",
+         title = "Panel A. Without state-specific time trends",
+         replace = TRUE,
+         style.tex = style.tex("aer"),
+         headers = list("Log (Arrests per 1000 population)"=5, "Chargesheeting rate"=2),
+         dict = c(lparrest_womcrime = "Crimes against women",
+                  lparrest_rape = "Rape",
+                  lparrest_womgirl = "Kidnapping of women",
+                  lparrest_nonwomen = "All crimes other than against women", 
+                  lparrest_kidmen = "Kidnapping of men",
+                  charge_womcrime = "Crimes against women",
+                  chargesheet_rate = "All crimes",
+                  postwres = "Women's Reservation Implemented"
+                  )
+         )
+
+#Panel B
+list(
+tab1to5 %>% 
+ filter(year>=1988 & majstate==1) %>% 
+  feols(c(lparrest_womcrime, lparrest_rape, lparrest_womgirl, lparrest_nonwomen, lparrest_kidmen) ~ postwres+ pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + i(stateid, year)| stateid + year),
+tab1to5 %>%
+ filter(year>=1991 & majstate==1) %>% 
+  feols(c(charge_womcrime, chargesheet_rate) ~ postwres+ pfemale + prural + plit + pfarm + womancm + pcgsdp + ppol_strength + i(stateid, year)| stateid + year)
+  ) %>% 
+  etable(keep = "%postwres", digits = 3,
+         cluster = "stateid",
+         group = list(`Demographic, economic  and political controls` = "pfemale",
+                      `Control for woman CM` = "womancm",
+                      `Control for police strength` = "ppol_strength",
+                      `Control for state specific time trend` = "2"),
+         fitstat=c('n', 'r2'),
+         file = "figures/Table9.tex",
+         title = "Panel B. With state-specific time trends",
+         style.tex = style.tex("aer"),
+         headers = list("Log (Arrests per 1000 population)"=5, "Chargesheeting rate"=2),
+         dict = c(lparrest_womcrime = "Crimes against women",
+                  lparrest_rape = "Rape",
+                  lparrest_womgirl = "Kidnapping of women",
+                  lparrest_nonwomen = "All crimes other than against women", 
+                  lparrest_kidmen = "Kidnapping of men",
+                  charge_womcrime = "Crimes against women",
+                  chargesheet_rate = "All crimes",
+                  postwres = "Women's Reservation Implemented"
+                  )
+         )
+```
+
+## Appendix : figure 1
+```{r}
+tab1to5 %>% 
+  filter(majstate == 1 & year >= 1985) %>%
+  select(year, pfemale, pmurder, prape2, pcr_order) %>% 
+  group_by(year) %>% 
+  mutate(prape = (prape2*pfemale)/(1+pfemale)) %>%
+  summarise(pmurder = mean(pmurder)*100,
+            prape = mean(prape)*100,
+            pcr_order = mean(pcr_order)*100) %>% 
+  ggplot(aes(year)) + 
+  geom_line(aes(y = pmurder, colour = "Murders")) + 
+  geom_line(aes(y = prape, colour = "Rapes")) +
+  geom_line(aes(y = pcr_order/3, colour = "Riots (right axis)")) +
+  scale_y_continuous(
+    name = "Number per 100,000 people",
+    sec.axis = sec_axis(~.*3, name="Number per 100,000 people")
+  ) 
+
+```
+
